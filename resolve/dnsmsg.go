@@ -362,6 +362,7 @@ type dnsRR_A struct {
 	A   uint32 `net:"ipv4"`
 }
 
+
 func (rr *dnsRR_A) Header() *dnsRR_Header {
 	return &rr.Hdr
 }
@@ -914,21 +915,40 @@ func (dns *dnsMsg) String() string {
 	return s
 }
 
-func convertRR_A(records []dnsRR) []net.IP {
+func convertRR_A(records []dnsRR) []string {
 	addrs := make([]net.IP, len(records))
 	for i, rr := range records {
 		a := rr.(*dnsRR_A).A
 		addrs[i] = net.IPv4(byte(a>>24), byte(a>>16), byte(a>>8), byte(a))
 	}
-	return addrs
+	s := make([]string, 0, 16)
+	for _, ip := range addrs {
+		s = append(s, ip.String())
+	}
+	return s
 }
 
-func convertRR_AAAA(records []dnsRR) []net.IP {
-        addrs := make([]net.IP, len(records))
-        for i, rr := range records {
-                a := make(net.IP, net.IPv6len)
-                copy(a, rr.(*dnsRR_AAAA).AAAA[:])
-                addrs[i] = a
-        }
-        return addrs
+func convertRR_AAAA(records []dnsRR) []string{
+	addrs := make([]net.IP, len(records))
+	for i, rr := range records {
+		a := make(net.IP, net.IPv6len)
+		copy(a, rr.(*dnsRR_AAAA).AAAA[:])
+		addrs[i] = a
+	}
+	s := make([]string, 0, 16)
+	for _, ip := range addrs {
+		s = append(s, ip.String())
+	}
+	return s
+}
+
+
+func convertRR_TXT(records []dnsRR) []string {
+	results := []string{}
+	for _, rr := range records {
+		a := rr.(*dnsRR_TXT).Txt
+		results = append(results, a)
+	}
+	//fmt.Println(results)
+	return results
 }

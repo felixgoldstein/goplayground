@@ -2,11 +2,10 @@ package main
 
 import (
 	"fmt"
-	"net"
 	"os"
 )
 
-func unpackDns(msg []byte, dnsType uint16) (domain string, id uint16, ips []net.IP) {
+func unpackDns(msg []byte, dnsType uint16) (domain string, id uint16, ips []string) {
 	d := new(dnsMsg)
 	if !d.Unpack(msg) {
 		// fmt.Fprintf(os.Stderr, "dns error (unpacking)\n")
@@ -33,6 +32,8 @@ func unpackDns(msg []byte, dnsType uint16) (domain string, id uint16, ips []net.
 			ips = convertRR_A(addrs)
 		case dnsTypeAAAA:
 			ips = convertRR_AAAA(addrs)
+		case dnsTypeTXT:
+			ips = convertRR_TXT(addrs)
 		}
 	}
 	return
