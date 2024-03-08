@@ -952,3 +952,13 @@ func convertRR_TXT(records []dnsRR) []string {
 	//fmt.Println(results)
 	return results
 }
+
+func convertRR_NS(records []dnsRR) []string {
+	results := []string{}
+	for _, rr := range records {
+		a := rr.(*dnsRR_NS).Ns
+		results = append(results, a)
+	}
+	//fmt.Println(results)
+	return results
+}

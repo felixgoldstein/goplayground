@@ -26,6 +26,13 @@ func unpackDns(msg []byte, dnsType uint16) (domain string, id uint16, ips []stri
 	}
 
 	_, addrs, err := answer(domain, "server", d, dnsType)
+
+
+	//debug err
+	// if err != nil {
+	//	 fmt.Fprintf(os.Stderr, "answer: %v\n", err)
+	// }
+
 	if err == nil {
 		switch (dnsType) {
 		case dnsTypeA:
@@ -34,8 +41,11 @@ func unpackDns(msg []byte, dnsType uint16) (domain string, id uint16, ips []stri
 			ips = convertRR_AAAA(addrs)
 		case dnsTypeTXT:
 			ips = convertRR_TXT(addrs)
+		case dnsTypeNS:
+			ips = convertRR_NS(addrs)
 		}
 	}
+
 	return
 }
 

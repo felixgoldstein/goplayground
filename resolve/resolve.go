@@ -49,6 +49,7 @@ var retryTime string
 var verbose bool
 var ipv6 bool
 var txt bool
+var nameserver bool
 
 func init() {
 	flag.StringVar(&dnsServer, "server", "8.8.8.8:53",
@@ -65,6 +66,8 @@ func init() {
 		"Ipv6 - ask for AAAA, not A")
 	flag.BoolVar(&txt, "txt", false,
 		"TXT Records - ask for TXT, not A and not AAAA")
+	flag.BoolVar(&nameserver, "ns", false,
+		"Nameserver - ask for NS")
 }
 
 func main() {
@@ -261,6 +264,9 @@ func do_send(c net.Conn, tryResolving <-chan *domainRecord) {
 		if txt {
 			t = dnsTypeTXT
 		}
+		if nameserver {
+			t = dnsTypeNS
+		}
 
 		msg := packDns(dr.domain, dr.id, t)
 
@@ -288,8 +294,13 @@ func do_receive(c net.Conn, resolved chan<- *domainAnswer) {
 		} else {
 			t = dnsTypeAAAA
 		}
+		
 		if txt {
 			t = dnsTypeTXT
+		}
+
+		if nameserver {
+			t = dnsTypeNS
 		}
 
 		domain, id, ips := unpackDns(buf[:n], t)
