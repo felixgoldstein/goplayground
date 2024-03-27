@@ -9,6 +9,7 @@ func unpackDns(msg []byte, dnsType uint16) (domain string, id uint16, ips []stri
 	d := new(dnsMsg)
 	if !d.Unpack(msg) {
 		// fmt.Fprintf(os.Stderr, "dns error (unpacking)\n")
+		ips = []string{"ERROR: dns error (unpacking)"}
 		return
 	}
 
@@ -16,22 +17,23 @@ func unpackDns(msg []byte, dnsType uint16) (domain string, id uint16, ips []stri
 
 	if len(d.question) < 1 {
 		// fmt.Fprintf(os.Stderr, "dns error (wrong question section)\n")
+		ips = []string{"ERROR: dns error (wrong question section)"}
 		return
 	}
 
 	domain = d.question[0].Name
 	if len(domain) < 1 {
 		// fmt.Fprintf(os.Stderr, "dns error (wrong domain in question)\n")
+		ips = []string{"ERROR: dns error (wrong domain in question)"}
 		return
 	}
 
 	_, addrs, err := answer(domain, "server", d, dnsType)
 
-
-	//debug err
-	// if err != nil {
-	//	 fmt.Fprintf(os.Stderr, "answer: %v\n", err)
-	// }
+	if err != nil {
+		// fmt.Fprintf(os.Stderr, "answer: %v\n", err)
+		ips = []string{fmt.Sprintf("ERROR: Answer from name server: \"%v\"", err)}
+	}
 
 	if err == nil {
 		switch (dnsType) {
