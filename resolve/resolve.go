@@ -50,6 +50,7 @@ var verbose bool
 var ipv6 bool
 var txt bool
 var nameserver bool
+var zoneCheck bool
 
 func init() {
 	flag.StringVar(&dnsServer, "server", "8.8.8.8:53",
@@ -68,6 +69,12 @@ func init() {
 		"TXT Records - ask for TXT, not A and not AAAA")
 	flag.BoolVar(&nameserver, "ns", false,
 		"Nameserver - ask for NS")
+	flag.BoolVar(&zoneCheck, "zone", false,
+		"Zone presence check - report \"domain,STATUS,records\" with STATUS one "+
+			"of DELEGATED (referral), INZONE (own A/AAAA), NXDOMAIN (absent), "+
+			"NODATA (present but empty), SERVFAIL, REFUSED, ... Ask a "+
+			"parent-zone nameserver for an authoritative answer; a recursive "+
+			"resolver works too but reports its cached view.")
 }
 
 func main() {
@@ -149,6 +156,9 @@ type domainAnswer struct {
 	id     uint16
 	domain string
 	ips    []string
+	// status is only populated in -zone mode; the default modes leave it
+	// empty and keep reporting through ips as before.
+	status string
 }
 
 func do_map_guard(domains <-chan string,
@@ -216,15 +226,23 @@ func do_map_guard(domains <-chan string,
 						dr.id, dr.domain)
 				}
 
-				s := make([]string, 0, 16)
-				for _, ip := range da.ips {
-					s = append(s, ip)
-				}
-				sort.Sort(sort.StringSlice(s))
-
 				// without trailing dot
 				domain := dr.domain[:len(dr.domain)-1]
-				fmt.Printf("%s, %s\n", domain, strings.Join(s, " "))
+
+				if zoneCheck {
+					// Left in the order zoneAnswer produced: the NS set is
+					// already sorted there, and the SOA fields are positional
+					// (zone, primary, contact), so sorting would scramble them.
+					fmt.Println(formatZoneLine(domain, da.status, da.ips))
+				} else {
+					s := make([]string, 0, 16)
+					for _, ip := range da.ips {
+						s = append(s, ip)
+					}
+					sort.Sort(sort.StringSlice(s))
+
+					fmt.Printf("%s, %s\n", domain, strings.Join(s, " "))
+				}
 
 				sumTries += dr.resend
 				domainCount += 1
@@ -267,6 +285,13 @@ func do_send(c net.Conn, tryResolving <-chan *domainRecord) {
 		if nameserver {
 			t = dnsTypeNS
 		}
+		// Type A rather than NS: a parent-zone nameserver answers it with a
+		// referral when the name is delegated, and with the name's own
+		// addresses when it lives in the zone directly. One query therefore
+		// covers both ways a name can be present, which an NS query cannot.
+		if zoneCheck {
+			t = dnsTypeA
+		}
 
 		msg := packDns(dr.domain, dr.id, t)
 
@@ -288,6 +313,12 @@ func do_receive(c net.Conn, resolved chan<- *domainAnswer) {
 			os.Exit(1)
 		}
 
+		if zoneCheck {
+			domain, id, status, detail := unpackDnsZone(buf[:n])
+			resolved <- &domainAnswer{id, domain, detail, status}
+			continue
+		}
+
 		var t uint16
 		if !ipv6 {
 			t = dnsTypeA
@@ -304,6 +335,6 @@ func do_receive(c net.Conn, resolved chan<- *domainAnswer) {
 		}
 
 		domain, id, ips := unpackDns(buf[:n], t)
-		resolved <- &domainAnswer{id, domain, ips}
+		resolved <- &domainAnswer{id, domain, ips, ""}
 	}
 }
