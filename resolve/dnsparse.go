@@ -36,7 +36,7 @@ func unpackDns(msg []byte, dnsType uint16) (domain string, id uint16, ips []stri
 	}
 
 	if err == nil {
-		switch (dnsType) {
+		switch dnsType {
 		case dnsTypeA:
 			ips = convertRR_A(addrs)
 		case dnsTypeAAAA:
