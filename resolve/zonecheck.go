@@ -54,6 +54,28 @@ func rcodeName(rcode int) string {
 func zoneAnswer(dns *dnsMsg) (status string, detail []string) {
 	name := dns.question[0].Name
 
+	// Preserve the source of negative answers. The authority
+	// SOA names the zone that answered plus its primary and its contact —
+	// for .de that is "de. f.nic.de. dns-operations.denic.de.", which lets
+	// the caller confirm DENIC answered rather than something in between.
+	soa := make([]string, 0, 3)
+	for _, rr := range dns.ns {
+		rec, ok := rr.(*dnsRR_SOA)
+		if !ok {
+			continue
+		}
+		soa = append(soa, rec.Header().Name, rec.Ns, rec.Mbox)
+		break
+	}
+
+	if dns.rcode == dnsRcodeNameError {
+		// Authoritative servers need not set RA for NXDOMAIN to be valid.
+		return zoneStatusNXDomain, soa
+	}
+	if dns.rcode != dnsRcodeSuccess {
+		return rcodeName(dns.rcode), soa
+	}
+
 	// A delegation surfaces as NS records owned by the queried name. A
 	// recursive resolver puts them in the answer section; a parent-zone
 	// nameserver returns them as a referral in the authority section, which
@@ -77,6 +99,28 @@ func zoneAnswer(dns *dnsMsg) (status string, detail []string) {
 		return zoneStatusDelegated, ns
 	}
 
+	// Recursive A/AAAA answers can carry CNAME chains in any record order.
+	// Follow only the chain rooted at our question, never unrelated addresses.
+	aliases := make(map[string]string)
+	for _, rr := range dns.answer {
+		if rec, ok := rr.(*dnsRR_CNAME); ok && rec.Hdr.Class == dnsClassINET {
+			aliases[strings.ToLower(rec.Hdr.Name)] = strings.ToLower(rec.Cname)
+		}
+	}
+	addressName := strings.ToLower(name)
+	visited := make(map[string]bool)
+	for {
+		if visited[addressName] {
+			return zoneStatusError, []string{"CNAME loop"}
+		}
+		visited[addressName] = true
+		next, ok := aliases[addressName]
+		if !ok {
+			break
+		}
+		addressName = next
+	}
+
 	// No delegation, but the name may still carry addresses. DENIC lets a
 	// domain live in the zone through its own A/AAAA entries instead of a
 	// delegation, and such a name resolves perfectly well — so finding
@@ -86,7 +130,7 @@ func zoneAnswer(dns *dnsMsg) (status string, detail []string) {
 	addrs := make([]string, 0, 8)
 	for _, rr := range dns.answer {
 		h := rr.Header()
-		if h.Class != dnsClassINET || h.Name != name {
+		if h.Class != dnsClassINET || !strings.EqualFold(h.Name, addressName) {
 			continue
 		}
 
@@ -104,31 +148,7 @@ func zoneAnswer(dns *dnsMsg) (status string, detail []string) {
 		return zoneStatusInZone, addrs
 	}
 
-	// Nothing at all, so the interesting part is who said so. The authority
-	// SOA names the zone that answered plus its primary and its contact —
-	// for .de that is "de. f.nic.de. dns-operations.denic.de.", which lets
-	// the caller confirm DENIC answered rather than something in between.
-	soa := make([]string, 0, 3)
-	for _, rr := range dns.ns {
-		rec, ok := rr.(*dnsRR_SOA)
-		if !ok {
-			continue
-		}
-		soa = append(soa, rec.Header().Name, rec.Ns, rec.Mbox)
-		break
-	}
-
-	switch dns.rcode {
-	case dnsRcodeNameError:
-		// Deliberately not gated on recursion_available the way answer()
-		// gates it: an authoritative server never sets RA, so requiring it
-		// would misreport every registry NXDOMAIN as a protocol error.
-		return zoneStatusNXDomain, soa
-	case dnsRcodeSuccess:
-		return zoneStatusNoData, soa
-	}
-
-	return rcodeName(dns.rcode), soa
+	return zoneStatusNoData, soa
 }
 
 // unpackDnsZone is the -zone counterpart to unpackDns.
