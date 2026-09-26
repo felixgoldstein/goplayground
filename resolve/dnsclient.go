@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"net"
 	"sort"
+	"strconv"
 )
 
 // DNSError represents a DNS lookup error.
@@ -75,7 +76,7 @@ func answer(name, server string, dns *dnsMsg, qtype uint16) (cname string, addrs
 		// for the query we sent.  If we didn't get
 		// a name error and we didn't get success,
 		// the server is behaving incorrectly.
-		return "", nil, &DNSError{Err: "server misbehaving", Name: name, Server: server}
+		return "", nil, &DNSError{Err: strconv.Itoa(dns.rcode), Name: name, Server: server}
 	}
 
 	// Look for the name.

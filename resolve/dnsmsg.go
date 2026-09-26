@@ -362,7 +362,6 @@ type dnsRR_A struct {
 	A   uint32 `net:"ipv4"`
 }
 
-
 func (rr *dnsRR_A) Header() *dnsRR_Header {
 	return &rr.Hdr
 }
@@ -928,7 +927,7 @@ func convertRR_A(records []dnsRR) []string {
 	return s
 }
 
-func convertRR_AAAA(records []dnsRR) []string{
+func convertRR_AAAA(records []dnsRR) []string {
 	addrs := make([]net.IP, len(records))
 	for i, rr := range records {
 		a := make(net.IP, net.IPv6len)
@@ -941,7 +940,6 @@ func convertRR_AAAA(records []dnsRR) []string{
 	}
 	return s
 }
-
 
 func convertRR_TXT(records []dnsRR) []string {
 	results := []string{}
