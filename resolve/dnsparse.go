@@ -59,6 +59,12 @@ func packDns(domain string, id uint16, dnsType uint16) []byte {
 	out.question = []dnsQuestion{
 		{domain, dnsType, dnsClassINET},
 	}
+	// Without EDNS0 a reply is capped at 512 bytes over UDP. Anything larger
+	// comes back with the TC bit and no answers, which reads exactly like a
+	// name without records (see tcp.go for the rest).
+	out.extra = []dnsRR{
+		&dnsRR_Header{Name: ".", Rrtype: dnsTypeOPT, Class: ednsUDPSize},
+	}
 
 	msg, ok := out.Pack()
 	if !ok {
