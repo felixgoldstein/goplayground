@@ -73,6 +73,7 @@ const (
 	dnsTypeTXT   = 16
 	dnsTypeAAAA  = 28
 	dnsTypeSRV   = 33
+	dnsTypeOPT   = 41 // EDNS0 pseudo-record, RFC 6891
 
 	// valid dnsQuestion.qtype only
 	dnsTypeAXFR  = 252
@@ -416,6 +417,16 @@ func packDomainName(s string, msg []byte, off int) (off1 int, ok bool) {
 	// Add trailing dot to canonicalize name.
 	if n := len(s); n == 0 || s[n-1] != '.' {
 		s += "."
+	}
+
+	// The root name is the bare terminating zero; the loop below would emit
+	// an empty label in front of it.
+	if s == "." {
+		if off+1 > len(msg) {
+			return len(msg), false
+		}
+		msg[off] = 0
+		return off + 1, true
 	}
 
 	// Each dot ends a segment of the name.

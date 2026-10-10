@@ -273,27 +273,7 @@ func do_send(c net.Conn, tryResolving <-chan *domainRecord) {
 	for {
 		dr := <-tryResolving
 
-		var t uint16
-		if !ipv6 {
-			t = dnsTypeA
-		} else {
-			t = dnsTypeAAAA
-		}
-		if txt {
-			t = dnsTypeTXT
-		}
-		if nameserver {
-			t = dnsTypeNS
-		}
-		// Type A rather than NS: a parent-zone nameserver answers it with a
-		// referral when the name is delegated, and with the name's own
-		// addresses when it lives in the zone directly. One query therefore
-		// covers both ways a name can be present, which an NS query cannot.
-		if zoneCheck {
-			t = dnsTypeA
-		}
-
-		msg := packDns(dr.domain, dr.id, t)
+		msg := packDns(dr.domain, dr.id, queryType())
 
 		_, err := c.Write(msg)
 		if err != nil {
@@ -302,6 +282,27 @@ func do_send(c net.Conn, tryResolving <-chan *domainRecord) {
 		}
 		time.Sleep(sendingDelay)
 	}
+}
+
+// queryType is the record type every query of this run asks for.
+func queryType() uint16 {
+	// Type A rather than NS: a parent-zone nameserver answers it with a
+	// referral when the name is delegated, and with the name's own
+	// addresses when it lives in the zone directly. One query therefore
+	// covers both ways a name can be present, which an NS query cannot.
+	if zoneCheck {
+		return dnsTypeA
+	}
+	if nameserver {
+		return dnsTypeNS
+	}
+	if txt {
+		return dnsTypeTXT
+	}
+	if ipv6 {
+		return dnsTypeAAAA
+	}
+	return dnsTypeA
 }
 
 func do_receive(c net.Conn, resolved chan<- *domainAnswer) {
@@ -313,28 +314,24 @@ func do_receive(c net.Conn, resolved chan<- *domainAnswer) {
 			os.Exit(1)
 		}
 
-		if zoneCheck {
-			domain, id, status, detail := unpackDnsZone(buf[:n])
-			resolved <- &domainAnswer{id, domain, detail, status}
+		if isTruncated(buf[:n]) {
+			// buf is reused by the next Read, so the goroutine gets a copy.
+			reply := append([]byte(nil), buf[:n]...)
+			go func() { resolved <- answerOverTCP(reply) }()
 			continue
 		}
 
-		var t uint16
-		if !ipv6 {
-			t = dnsTypeA
-		} else {
-			t = dnsTypeAAAA
-		}
-		
-		if txt {
-			t = dnsTypeTXT
-		}
-
-		if nameserver {
-			t = dnsTypeNS
-		}
-
-		domain, id, ips := unpackDns(buf[:n], t)
-		resolved <- &domainAnswer{id, domain, ips, ""}
+		resolved <- decodeAnswer(buf[:n])
 	}
+}
+
+// decodeAnswer turns a complete DNS reply into the answer for its domain.
+func decodeAnswer(msg []byte) *domainAnswer {
+	if zoneCheck {
+		domain, id, status, detail := unpackDnsZone(msg)
+		return &domainAnswer{id, domain, detail, status}
+	}
+
+	domain, id, ips := unpackDns(msg, queryType())
+	return &domainAnswer{id, domain, ips, ""}
 }
